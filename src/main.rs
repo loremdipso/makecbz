@@ -14,6 +14,7 @@ use std::path::PathBuf;
 use std::process::Command;
 use std::rc::Rc;
 use structopt::StructOpt;
+use walkdir::WalkDir;
 
 #[derive(Debug, StructOpt)]
 #[structopt(about = "Compress folders sensibly")]
@@ -115,7 +116,7 @@ fn compress_folder(
 
 	info!("[{} / {}] Starting \"{}\"...", index, total, &folder_str);
 
-	let mut files = get_sorted_children(&folder, &options)?;
+	let mut files = get_sorted_child_files(&folder, &options)?;
 
 	let target = folder.as_path().with_extension(options.extension.clone());
 
@@ -129,12 +130,6 @@ fn compress_folder(
 	return Ok(());
 }
 
-fn get_sorted_children(folder: &PathBuf, options: &Opt) -> Result<Vec<PathBuf>, Box<dyn Error>> {
-	let mut children = get_children(folder)?;
-	children.sort_by(|a, b| split_and_pad(a).partial_cmp(&split_and_pad(b)).unwrap());
-	return Ok(children);
-}
-
 fn get_children(folder: &PathBuf) -> Result<Vec<PathBuf>, Box<dyn Error>> {
 	Ok(fs::read_dir(folder)?
 		.filter_map(|entry| {
@@ -145,6 +140,29 @@ fn get_children(folder: &PathBuf) -> Result<Vec<PathBuf>, Box<dyn Error>> {
 			}
 		})
 		.collect::<Vec<PathBuf>>())
+}
+
+fn get_sorted_child_files(folder: &PathBuf, options: &Opt) -> Result<Vec<PathBuf>, Box<dyn Error>> {
+	// let mut children = get_children(folder)?;
+	let mut children = get_child_files_recursively(folder);
+	children.sort_by(|a, b| split_and_pad(a).partial_cmp(&split_and_pad(b)).unwrap());
+	return Ok(children);
+}
+
+fn get_child_files_recursively(folder: &PathBuf) -> Vec<PathBuf> {
+	WalkDir::new(folder)
+		.into_iter()
+		.filter_map(|entry| {
+			if let Ok(entry) = entry {
+				// TODO: clean up this path/pathbuf nonsense
+				let mut pathbuf = PathBuf::new();
+				pathbuf.push(entry.path());
+				Some(pathbuf)
+			} else {
+				None
+			}
+		})
+		.collect::<Vec<PathBuf>>()
 }
 
 fn split_and_pad(input: &PathBuf) -> Vec<String> {
